@@ -13,6 +13,11 @@
             font-size: 16px;
             cursor: pointer;
         }
+        .remove-btn {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+        }
 
         .modal {
             display: none;
@@ -41,6 +46,12 @@
             font-size: 20px;
             cursor: pointer;
         }
+        .book-btn{
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            margin-left: 10px;
+        }
 
         input, textarea, select {
             width: 100%;
@@ -58,7 +69,8 @@
 <body>
 
     <button class="open-btn" onclick="openForm()">Add Resource</button>
-	<div id="resourceList" style="height:600px;width:1200px;margin-left:175px;margin-top:75px;border:1px solid #ccc;font:24px/36px Georgia, Garamond, Serif;overflow:auto;">
+    <button class="remove-btn" onclick="removeText()">Remove Resource</button>
+        <div id="resourceList" style="height:600px;width:1200px;margin-left:175px;margin-top:75px;border:1px solid #ccc;font:24px/36px Georgia, Garamond, Serif;overflow:auto;">
 </div>
 
     <div id="formModal" class="modal">
@@ -97,6 +109,13 @@
             document.getElementById("formModal").style.display = "none";
         }
 
+        function removeText() {
+            const resourceList = document.getElementById("resourceList");
+            if (resourceList.lastElementChild) {
+                resourceList.removeChild(resourceList.lastElementChild);
+            }
+        }
+
         window.onclick = function(event) {
             const modal = document.getElementById("formModal");
             if (event.target === modal) {
@@ -104,7 +123,7 @@
             }
         }
 
-	document.getElementById("resourceForm").addEventListener("submit", function(e) {
+        document.getElementById("resourceForm").addEventListener("submit", function(e) {
         e.preventDefault(); // Stop page refresh
 
         const name = this.resourceName.value;
@@ -113,19 +132,53 @@
         const availability = this.availability.value;
 
         const resourceList = document.getElementById("resourceList");
+        const resourceDiv = document.createElement("div");
+        resourceDiv.className = "resourceItem";
 
-resourceList.innerHTML += `
+resourceDiv.innerHTML = `
 ${name}<br>
 ${location}<br>
 ${description}<br>
 Status: ${availability}
 <hr>
 `;
-	
-	this.reset();
-	closeForm();
-	});
-    </script>
+resourceList.appendChild(resourceDiv);
 
+        this.reset();
+        closeForm();
+        });
+    </script>
+<script>
+  // Add this AFTER your existing submit handler (no changes to your existing code)
+
+  // When a resource item is added, append a "Book" button to it
+  const resourceList = document.getElementById("resourceList");
+
+  const observer = new MutationObserver((mutations) => {
+    for (const m of mutations) {
+      for (const node of m.addedNodes) {
+        if (node.nodeType === 1 && node.classList.contains("resourceItem")) {
+          // Avoid adding twice
+          if (node.querySelector(".book-btn")) continue;
+
+          const bookBtn = document.createElement("button");
+          bookBtn.type = "button";
+          bookBtn.className = "book-btn";
+          bookBtn.textContent = "Book Resource";
+          bookBtn.style.marginTop = "10px";
+
+          bookBtn.addEventListener("click", () => {
+            // You can replace this with your booking logic (API call, modal, etc.)
+            alert("Booked: " + node.firstChild.textContent.trim());
+          });
+
+          node.appendChild(bookBtn);
+        }
+      }
+    }
+  });
+
+  observer.observe(resourceList, { childList: true });
+</script>
 </body>
 </html>
