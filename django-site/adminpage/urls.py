@@ -2,5 +2,9 @@ from django.urls import path
 from . import views
 
 urlpatterns = [
-    path('', views.showAdminPage)
+    # pages
+    path('', views.showAdminPage),
+
+    # API
+    path('add-resource/', views.add_resource, name='add_resource')
 ]

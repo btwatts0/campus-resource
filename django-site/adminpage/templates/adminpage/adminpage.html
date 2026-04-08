@@ -629,6 +629,7 @@
 
 <!-- add resource modal -->
 <div class="modal-overlay" id="add-modal" onclick="closeOnOverlay(event,'add-modal')">
+  {% csrf_token %}
   <div class="modal-box">
     <div class="modal-header">
       <h3>Add New Resource</h3>
@@ -703,13 +704,24 @@
 
 <div id="toast"></div>
 
+{{ resources|json_script:"resource_data" }}
 <script>
-  const resources = {
-    Books: [],
-    Rooms: [],
-    Loanables: [],
-    Tutoring: [],
-  };
+  const resourcedataE1 = document.getElementById('resource-data');
+  let allResources = []
+
+  if (resourcedataE1){
+    try{
+      allResources = JSON.parse(resourcedataE1.textContent);
+      console.log('Loaded resources:', allResources);
+    } catch (error){
+      console.error('Failed to parse resources:', error);
+    }
+  }
+  else{
+    console.warn('resource-data element not found');
+  }
+
+  const csrftoken = document.querySelector('[name=csrfmiddlewaretoken]')?.value;
 
   let currentTab = 'Books';
   let currentResource = null;
@@ -740,14 +752,14 @@
   function renderTab(tab) {
     const grid = document.getElementById('card-grid');
     const empty = document.getElementById('empty-state');
-    const list = resources[tab] || [];
+    const list = allResources.filter(r => r.category === tab);
     grid.innerHTML = '';
     if (list.length === 0) {
       empty.style.display = 'flex';
       return;
     }
     empty.style.display = 'none';
-    list.forEach((r, i) => {
+    list.forEach((r) => {
       let statusClass = 'status-unavailable';
       if (r.avail === 'Available') statusClass = 'status-available';
       else if (r.avail === 'Limited') statusClass = 'status-limited';
@@ -768,7 +780,7 @@
         </div>
         <div class="card-footer">
           <span class="card-location">📍 ${r.location}</span>
-          <button class="btn-view" onclick="openDetail(${i})">View details</button>
+          <button class="btn-view" onclick="openDetail(${r.id})">View details</button>
         </div>`;
       grid.appendChild(card);
     });
@@ -776,28 +788,61 @@
 
   function openAddModal() { openModal('add-modal'); }
 
-  function submitResource() {
+  async function submitResource() {
     const name = document.getElementById('r-name').value.trim();
     const loc = document.getElementById('r-location').value.trim();
     const cat = document.getElementById('r-category').value;
     const desc = document.getElementById('r-desc').value.trim();
     const avail = document.getElementById('r-avail').value;
     if (!name || !loc || !desc) { showToast('Please fill in all required fields.'); return; }
-    resources[cat].push({ name, location: loc, desc, avail });
-    closeModal('add-modal');
-    if (cat === currentTab) renderTab(currentTab);
-    document.querySelectorAll('.tab-btn').forEach(b => {
-      if (b.textContent === cat) b.click();
-    });
-    showToast(`"${name}" added to ${cat}.`);
-    document.getElementById('r-name').value = '';
-    document.getElementById('r-location').value = '';
-    document.getElementById('r-desc').value = '';
-    document.getElementById('r-avail').value = 'Available';
+    try{
+      const response = await fetch('/add-resource/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': csrftoken
+        },
+        body: JSON.stringify({
+          name,
+          location: loc,
+          category: cat,
+          desc,
+          avail
+        })
+      });
+
+
+      const result = await response.json();
+      if (!result.success){
+        showToast(result.error || 'Failed to save resource.');
+        return;
+      }
+
+      allResources.push(result.resource);
+      closeModal('add-modal');
+      if (cat === currentTab) renderTab(currentTab);
+      document.querySelectorAll('.tab-btn').forEach(b => {
+        if (b.textContent === cat) b.click();
+      });
+
+      showToast(`"${name}" added to ${cat}.`);
+      document.getElementById('r-name').value = '';
+      document.getElementById('r-location').value = '';
+      document.getElementById('r-desc').value = '';
+      document.getElementById('r-avail').value = 'Available';
+    } catch (error) {
+      console.error(error);
+      showToast('Something went wrong while saving.');
+    }
   }
 
-  function openDetail(index) {
-    const r = resources[currentTab][index];
+  function openDetail(resourceId) {
+    const r = allResources.find(r => r.id === resourceId);
+    if (!r){
+      showToast("Resource not found.");
+      return;
+    }
+
     currentResource = r;
     document.getElementById('detail-title').textContent = r.name;
     document.getElementById('detail-desc').textContent = r.desc + ' — Located at ' + r.location + '.';
