@@ -820,20 +820,37 @@
 
 <div id="toast"></div>
 
-{{ resources|json_script:"resource-data" }}
+
 <script>
-  // Initialize resources from localStorage or use empty object
-  let allResources = JSON.parse(localStorage.getItem('campusResources')) || [];
+  // Initializations
+  let allResources = []
   let currentTab = 'Books';
   let currentResource = null;
   let currentUser = null; // { email, role: 'admin' | 'user' }
   let userReservations = []; // Array of { resourceId, resourceName, timeSlot, timestamp }
+
+  // Token needed to post resource information to views
+  const csrftoken = document.querySelector('[name=csrfmiddlewaretoken]')?.value;
 
   // Mock user database (in production, this would be server-side)
   const mockUsers = {
     'admin@csuchico.edu': { password: 'admin123', role: 'admin' },
     'user@csuchico.edu': { password: 'user123', role: 'user' }
   };
+
+  // Gets Resource objects from views, saves them to allResources, then calls renderTab
+  async function loadResources() {
+    try{
+      allResources = [];
+      const response = await fetch('/get-resources/');
+      const result = await response.json();
+      allResources = result.resources || [];
+      renderTab(currentTab);
+    } catch (error){
+      console.error('Failed to load resources:', error);
+      showToast('Failed to load resources');
+    }
+  }
 
   function doLogin() {
     const email = document.getElementById('login-email').value.trim();
@@ -853,7 +870,7 @@
     document.getElementById('login-page').style.display = 'none';
     document.getElementById('app-page').style.display = 'block';
     updateUIForRole();
-    renderTab(currentTab);
+    loadResources();
   }
   
   function updateUIForRole() {
@@ -875,6 +892,8 @@
     }
   }
   
+  // For now, reservations are all stored locally, but this should change soon
+
   function loadUserReservations() {
     const stored = localStorage.getItem(`reservations_${currentUser.email}`);
     userReservations = stored ? JSON.parse(stored) : [];
@@ -882,10 +901,6 @@
   
   function saveUserReservations() {
     localStorage.setItem(`reservations_${currentUser.email}`, JSON.stringify(userReservations));
-  }
-  
-  function saveResources() {
-    localStorage.setItem('campusResources', JSON.stringify(allResources));
   }
 
   function doLogout() {
@@ -901,7 +916,7 @@
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
     el.classList.add('active');
     currentTab = tab;
-    renderTab(tab);
+    loadResources();
   }
 
   function renderTab(tab) {
@@ -928,7 +943,9 @@
       const card = document.createElement('div');
       card.className = 'resource-card';
       card.innerHTML = `
-        ${currentUser.role === 'admin' ? `<button class="delete-btn" onclick="deleteResource('${r.id}')">&times;</button>` : ''}
+
+        ${currentUser.role === 'admin' ? `<button class="delete-btn" onclick="deleteResource(${r.id})">&times;</button>` : ''}
+
         <div class="card-image">
           <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#999" stroke-width="1.2">
             <rect x="3" y="3" width="18" height="18" rx="2"/>
@@ -969,48 +986,82 @@
       return; 
     }
     
-    const newResource = {
-      id: Date.now().toString(),
-      name,
-      location: loc,
-      category: cat,
-      desc,
-      avail
-    };
-    
-    allResources.push(newResource);
-    saveResources();
-    
-    closeModal('add-modal');
-    if (cat === currentTab) renderTab(currentTab);
-    
-    document.querySelectorAll('.tab-btn').forEach(b => {
-      if (b.textContent === cat) b.click();
-    });
-    
-    showToast(`"${name}" added to ${cat}.`);
-    
-    // Clear form
-    document.getElementById('r-name').value = '';
-    document.getElementById('r-location').value = '';
-    document.getElementById('r-desc').value = '';
-    document.getElementById('r-avail').value = 'Available';
+    // Posts the resource information entered to the views to create a Resource object
+    try{
+      const response = await fetch('/add-resource/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': csrftoken
+        },
+        body: JSON.stringify({
+          name,
+          location: loc,
+          category: cat,
+          desc,
+          avail
+        })
+      });
+
+
+      const result = await response.json();
+      if (!result.success){
+        showToast(result.error || 'Failed to save resource.');
+        return;
+      }
+
+      closeModal('add-modal');
+      if (cat === currentTab) loadResources();
+      document.querySelectorAll('.tab-btn').forEach(b => {
+        if (b.textContent === cat) b.click();
+      });
+
+      showToast(`"${name}" added to ${cat}.`);
+      document.getElementById('r-name').value = '';
+      document.getElementById('r-location').value = '';
+      document.getElementById('r-desc').value = '';
+      document.getElementById('r-avail').value = 'Available';
+    } catch (error) {
+      console.error(error);
+      showToast('Something went wrong while saving.');
+    }
   }
 
-  function deleteResource(resourceId) {
+  async function deleteResource(resourceId) {
     if (currentUser.role !== 'admin') {
       showToast('Only admins can delete resources.');
       return;
     }
-    
+
     const resource = allResources.find(r => r.id === resourceId);
     if (!resource) return;
-    
     if (confirm(`Are you sure you want to delete "${resource.name}"?`)) {
-      allResources = allResources.filter(r => r.id !== resourceId);
-      saveResources();
-      renderTab(currentTab);
-      showToast(`"${resource.name}" has been deleted.`);
+      try{
+        // Posts id of resource to delete to views, where that object will be deleted
+        const response = await fetch('/remove-resource/', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrftoken
+          },
+          body: JSON.stringify({
+            id: resourceId
+          })
+        });
+
+        const result = await response.json();
+        if (!result.success){
+          showToast(result.error || 'Failed to delete resource.')
+          return;
+        }
+
+        loadResources();
+
+        showToast(`"${resource.name}" has been deleted.`);
+      } catch (error) {
+        console.error(error);
+        showToast('Something went wrong while deleting.');
+      }
     }
   }
 
@@ -1127,6 +1178,7 @@
   function closeModal(id) { document.getElementById(id).classList.remove('open'); }
   function closeOnOverlay(e, id) { if (e.target === document.getElementById(id)) closeModal(id); }
 
+  // Used to give popup on screen
   function showToast(msg) {
     const t = document.getElementById('toast');
     t.textContent = msg;

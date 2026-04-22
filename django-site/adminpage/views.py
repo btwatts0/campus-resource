@@ -7,6 +7,8 @@ import json
 
 # Create your views here.
 
+
+# Called when a resource is added, creates a Resource object
 @require_POST
 def add_resource(request):
     try:
@@ -41,7 +43,34 @@ def add_resource(request):
         }
     })
 
+
+# Called when a resource is deleted, gets rid of a Resource object
+@require_POST
+def remove_resource(request):
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"success": False, "error": "Invalid JSON"}, status=400)
+
+    resource_id = data.get("id", "")
+
+    if not resource_id:
+        return JsonResponse({"success": False, "error": "Missing required fields"}, status=400)
+
+    Resource.objects.filter(id=resource_id).delete()
+
+    return JsonResponse({
+        "success": True
+    })
+
+
+# Used by template to access Resource objects
+def get_resources(request):
+    resources = list(Resource.objects.values("id", "name", "category", "location", "desc", "avail"))
+    return JsonResponse({"resources": resources})
+
+
+# Renders html file
 @ensure_csrf_cookie
 def showAdminPage(request):
-    resources = list(Resource.objects.values("id", "name", "category", "location", "desc", "avail"))
-    return render(request, 'adminpage/adminpage.html', {"resources": resources})
+    return render(request, 'adminpage/adminpage.html')
