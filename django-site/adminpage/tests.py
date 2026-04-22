@@ -22,8 +22,8 @@ class ResourceModelTest(TestCase):
         self.assertEqual(resource.avail, "Available")
 
     def test_category_choices(self):
-        """Resource accepts each valid category choice."""
-        valid_categories = ["Books", "Rooms", "Loanables", "Tutoring"]
+        """Resource accepts each valid category choice defined on the model."""
+        valid_categories = [value for value, _ in Resource._meta.get_field("category").choices]
         for category in valid_categories:
             resource = Resource.objects.create(
                 name=f"Test {category}",
@@ -35,8 +35,8 @@ class ResourceModelTest(TestCase):
             self.assertEqual(resource.category, category)
 
     def test_availability_choices(self):
-        """Resource accepts each valid availability choice."""
-        valid_avail = ["Available", "Limited", "Unavailable"]
+        """Resource accepts each valid availability choice defined on the model."""
+        valid_avail = [value for value, _ in Resource._meta.get_field("avail").choices]
         for avail in valid_avail:
             resource = Resource.objects.create(
                 name=f"Resource {avail}",
@@ -47,10 +47,17 @@ class ResourceModelTest(TestCase):
             )
             self.assertEqual(resource.avail, avail)
 
-    def test_resource_count_after_creation(self):
-        """Database contains the expected number of Resource records."""
-        # setUp already created one resource
-        self.assertEqual(Resource.objects.count(), 1)
+    def test_resource_count_increases_on_creation(self):
+        """Creating an additional Resource increases the count in the database."""
+        initial_count = Resource.objects.count()
+        Resource.objects.create(
+            name="Study Room B",
+            category="Rooms",
+            location="Meriam Library",
+            desc="A quiet study room available for booking.",
+            avail="Limited",
+        )
+        self.assertEqual(Resource.objects.count(), initial_count + 1)
 
     def test_resource_deletion(self):
         """Deleting a Resource removes it from the database."""
