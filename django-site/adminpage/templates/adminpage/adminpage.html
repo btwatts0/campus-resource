@@ -746,6 +746,7 @@
 
 <!-- add resource modal -->
 <div class="modal-overlay" id="add-modal" onclick="closeOnOverlay(event,'add-modal')">
+  {% csrf_token %}
   <div class="modal-box">
     <div class="modal-header">
       <h3>Add New Resource</h3>
@@ -819,7 +820,6 @@
 </div>
 
 <div id="toast"></div>
-
 
 <script>
   // Initializations
@@ -943,9 +943,7 @@
       const card = document.createElement('div');
       card.className = 'resource-card';
       card.innerHTML = `
-
         ${currentUser.role === 'admin' ? `<button class="delete-btn" onclick="deleteResource(${r.id})">&times;</button>` : ''}
-
         <div class="card-image">
           <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#999" stroke-width="1.2">
             <rect x="3" y="3" width="18" height="18" rx="2"/>
@@ -960,7 +958,7 @@
         </div>
         <div class="card-footer">
           <span class="card-location">📍 ${r.location}</span>
-          <button class="btn-view" onclick="openDetail('${r.id}')">View details</button>
+          <button class="btn-view" onclick="openDetail(${r.id})">View details</button>
         </div>`;
       grid.appendChild(card);
     });
@@ -974,7 +972,7 @@
     openModal('add-modal'); 
   }
 
-  function submitResource() {
+  async function submitResource() {
     const name = document.getElementById('r-name').value.trim();
     const loc = document.getElementById('r-location').value.trim();
     const cat = document.getElementById('r-category').value;
