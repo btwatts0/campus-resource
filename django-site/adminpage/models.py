@@ -21,3 +21,23 @@ class Resource(models.Model):
     location = models.CharField(max_length=200)
     desc = models.TextField()
     avail = models.CharField(max_length = 20, choices=AVAILABILITY_CHOICES)
+
+class Reservation(models.Model):
+    TIME_SLOTS = [
+        ("8:00 AM", "8:00 AM"),
+        ("9:00 AM", "9:00 AM"),
+        ("10:00 AM", "10:00 AM"),
+        ("11:00 AM", "11:00 AM"),
+        ("12:00 PM", "12:00 PM"),
+        ("1:00 PM", "1:00 PM"),
+        ("2:00 PM", "2:00 PM"),
+        ("3:00 PM", "3:00 PM"),
+        ("4:00 PM", "4:00 PM"),
+        ("5:00 PM", "5:00 PM"),
+        ("6:00 PM", "6:00 PM"),
+        ("7:00 PM", "7:00 PM"),
+    ]
+
+    resource = models.ForeignKey(Resource, on_delete=models.CASCADE)
+    timeSlot = models.CharField(max_length = 20, choices = TIME_SLOTS)
+    timeReserved = models.CharField(max_length = 200)

@@ -827,7 +827,7 @@
   let currentTab = 'Books';
   let currentResource = null;
   let currentUser = null; // { email, role: 'admin' | 'user' }
-  let userReservations = []; // Array of { resourceId, resourceName, timeSlot, timestamp }
+  let userReservations = [];
 
   // Token needed to post resource information to views
   const csrftoken = document.querySelector('[name=csrfmiddlewaretoken]')?.value;
@@ -865,7 +865,6 @@
     }
     
     currentUser = { email, role: user.role };
-    loadUserReservations();
     
     document.getElementById('login-page').style.display = 'none';
     document.getElementById('app-page').style.display = 'block';
@@ -887,20 +886,23 @@
       actionBtn.style.display = 'inline-block';
     } else {
       actionBtn.textContent = 'My Reservations';
-      actionBtn.onclick = showMyReservations;
+      actionBtn.onclick = loadUserReservations;
       actionBtn.style.display = 'inline-block';
     }
   }
   
-  // For now, reservations are all stored locally, but this should change soon
-
-  function loadUserReservations() {
-    const stored = localStorage.getItem(`reservations_${currentUser.email}`);
-    userReservations = stored ? JSON.parse(stored) : [];
-  }
-  
-  function saveUserReservations() {
-    localStorage.setItem(`reservations_${currentUser.email}`, JSON.stringify(userReservations));
+// Gets Reservation objects from views, saves them to userReservations, then calls showMyReservations
+  async function loadUserReservations() {
+    try{
+      userReservations = [];
+      const response = await fetch('/get-reservations/');
+      const result = await response.json();
+      userReservations = result.reservations || [];
+      showMyReservations();
+    } catch (error){
+      console.error('Failed to load reservations:', error);
+      showToast('Failed to load reservations');
+    }
   }
 
   function doLogout() {
@@ -1100,7 +1102,7 @@
     document.getElementById('schedule-btn').disabled = !document.getElementById('agree-check').checked;
   }
 
-  function doSchedule() {
+  async function doSchedule() {
     if (currentUser.role !== 'user') {
       showToast('Only users can make reservations.');
       return;
@@ -1111,20 +1113,37 @@
       showToast('Please select a time slot.'); 
       return; 
     }
+
+    const timeSlot = selected.textContent;
+    const timeReserved = new Date().toISOString();
+
+    // Posts the reservation information (id of resource being reserved, time slot, and what time it was reserved) to views
+    try{
+      const response = await fetch('/add-reservation/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': csrftoken
+        },
+        body: JSON.stringify({
+          resource_id: currentResource.id,
+          timeSlot,
+          timeReserved
+        })
+      });
+
+      const result = await response.json();
+      if (!result.success){
+        showToast(result.error || 'Failed to save resource.');
+        return;
+      }
+      closeModal('detail-modal');
+      showToast(`Reserved: "${currentResource.name}" at ${selected.textContent}`);
+    } catch (error) {
+      console.error(error);
+      showToast('Something went wrong while saving.');
+    }
     
-    const reservation = {
-      id: Date.now().toString(),
-      resourceId: currentResource.id,
-      resourceName: currentResource.name,
-      timeSlot: selected.textContent,
-      timestamp: new Date().toISOString()
-    };
-    
-    userReservations.push(reservation);
-    saveUserReservations();
-    
-    closeModal('detail-modal');
-    showToast(`Reserved: "${currentResource.name}" at ${selected.textContent}`);
   }
 
   function showMyReservations() {
@@ -1151,24 +1170,46 @@
       item.className = 'reservation-item';
       item.innerHTML = `
         <div class="reservation-info">
-          <h4>${res.resourceName}</h4>
-          <p>Time: ${res.timeSlot} • Reserved on ${new Date(res.timestamp).toLocaleDateString()}</p>
+          <h4>${res.resource.name}</h4>
+          <p>Time: ${res.timeSlot} • Reserved on ${new Date(res.timeReserved).toLocaleDateString()}</p>
         </div>
-        <button class="btn-cancel" onclick="cancelReservation('${res.id}')">Cancel</button>
+        <button class="btn-cancel" onclick="cancelReservation(${res.id})">Cancel</button>
       `;
       reservationList.appendChild(item);
     });
   }
 
-  function cancelReservation(reservationId) {
+  async function cancelReservation(reservationId) {
     const reservation = userReservations.find(r => r.id === reservationId);
     if (!reservation) return;
     
-    if (confirm(`Are you sure you want to cancel your reservation for "${reservation.resourceName}"?`)) {
-      userReservations = userReservations.filter(r => r.id !== reservationId);
-      saveUserReservations();
-      showMyReservations();
-      showToast('Reservation cancelled successfully.');
+    if (confirm(`Are you sure you want to cancel your reservation for "${reservation.resource.name}"?`)) {
+      try{
+        // Posts id of reservation to delete to views, where that object will be deleted
+        const response = await fetch('/remove-reservation/', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrftoken
+          },
+          body: JSON.stringify({
+            reservation_id: reservationId
+          })
+        });
+
+        const result = await response.json();
+        if (!result.success){
+          showToast(result.error || 'Failed to delete reservation.')
+          return;
+        }
+
+        loadUserReservations();
+
+        showToast(`Reservation cancelled successfully`);
+      } catch (error) {
+        console.error(error);
+        showToast('Something went wrong while cancelling.');
+      }
     }
   }
 
